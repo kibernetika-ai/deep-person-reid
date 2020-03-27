@@ -435,18 +435,6 @@ class OSBlock(nn.Module):
         return F.relu(out)
 
 
-class Sequential(layers.Layer):
-    def __init__(self, *layers):
-        super(Sequential, self).__init__()
-        self.layers = layers
-
-    def call(self, inputs, **kwargs):
-        x = inputs
-        for layer in self.layers:
-            x = layer(x)
-        return x
-
-
 class OSBlockTF(layers.Layer):
     """Omni-scale feature learning block."""
 
@@ -461,16 +449,16 @@ class OSBlockTF(layers.Layer):
         mid_channels = out_channels // bottleneck_reduction
         self.conv1 = Conv1x1TF(in_channels, mid_channels)
         self.conv2a = LightConv3x3TF(mid_channels, mid_channels)
-        self.conv2b = Sequential(
+        self.conv2b = tf.keras.Sequential(
             LightConv3x3TF(mid_channels, mid_channels),
             LightConv3x3TF(mid_channels, mid_channels),
         )
-        self.conv2c = Sequential(
+        self.conv2c = tf.keras.Sequential(
             LightConv3x3TF(mid_channels, mid_channels),
             LightConv3x3TF(mid_channels, mid_channels),
             LightConv3x3TF(mid_channels, mid_channels),
         )
-        self.conv2d = Sequential(
+        self.conv2d = tf.keras.Sequential(
             LightConv3x3TF(mid_channels, mid_channels),
             LightConv3x3TF(mid_channels, mid_channels),
             LightConv3x3TF(mid_channels, mid_channels),
@@ -741,13 +729,13 @@ class OSNetTF(tf.keras.Model):
 
         if reduce_spatial_size:
             m_layers.append(
-                Sequential(
+                tf.keras.Sequential(
                     Conv1x1TF(out_channels, out_channels),
                     layers.AvgPool2D(2, strides=2)
                 )
             )
 
-        return Sequential(*m_layers)
+        return tf.keras.Sequential(*m_layers)
 
     def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
         if fc_dims is None or fc_dims < 0:
@@ -768,7 +756,7 @@ class OSNetTF(tf.keras.Model):
 
         self.feature_dim = fc_dims[-1]
 
-        return Sequential(*m_layers)
+        return tf.keras.Sequential(*m_layers)
 
     def _init_params(self):
         for m in self.layers:
@@ -884,27 +872,12 @@ def osnet_x0_5(num_classes=1000, pretrained=True, loss='softmax', **kwargs):
     return model
 
 
-def osnet_x0_25(num_classes=1000, pretrained=True, loss='softmax', **kwargs):
+def osnet_x0_25(num_classes=751, loss='softmax', **kwargs):
     # very tiny size (width x0.25)
-    model = OSNet(
+    model = OSNetTF(
         num_classes,
-        blocks=[OSBlock, OSBlock, OSBlock],
-        layers=[2, 2, 2],
-        channels=[16, 64, 96, 128],
-        loss=loss,
-        **kwargs
-    )
-    # if pretrained:
-    #     init_pretrained_weights(model, key='osnet_x0_25')
-    return model
-
-
-def osnet_x0_25_fixed(num_classes=751, pretrained=False, loss='softmax', **kwargs):
-    # very tiny size (width x0.25)
-    model = OSNet(
-        num_classes,
-        blocks=[OSBlock, OSBlock, OSBlock],
-        layers=[2, 2, 2],
+        blocks=[OSBlockTF, OSBlockTF, OSBlockTF],
+        m_layers=[2, 2, 2],
         channels=[16, 64, 96, 128],
         loss=loss,
         **kwargs
