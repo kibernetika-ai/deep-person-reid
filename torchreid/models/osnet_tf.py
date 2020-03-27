@@ -65,7 +65,7 @@ class ConvLayerTF(layers.Layer):
             padding=padding,
             use_bias=False,
         )
-        self.bn = layers.BatchNormalization(axis=1)
+        self.bn = layers.BatchNormalization(axis=1, epsilon=1e-5, momentum=0.1)
         self.relu = layers.ReLU()
 
     def call(self, inputs, **kwargs):
@@ -110,7 +110,7 @@ class Conv1x1TF(layers.Layer):
             padding="SAME",
             use_bias=False,
         )
-        self.bn = layers.BatchNormalization(momentum=0.1, epsilon=1e-5)
+        self.bn = layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5)
         self.relu = layers.ReLU()
 
     def call(self, x, **kwargs):
@@ -144,7 +144,7 @@ class Conv1x1LinearTF(layers.Layer):
         self.conv = layers.Conv2D(
             out_channels, 1, strides=stride, padding="SAME", use_bias=False
         )
-        self.bn = layers.BatchNormalization(momentum=0.1, epsilon=1e-5)
+        self.bn = layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5)
 
     def call(self, x, **kwargs):
         x = self.conv(x)
@@ -188,7 +188,7 @@ class Conv3x3TF(layers.Layer):
             padding="SAME",
             use_bias=False,
         )
-        self.bn = layers.BatchNormalization(momentum=0.1, epsilon=1e-5)
+        self.bn = layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5)
         self.relu = layers.ReLU()
 
     def call(self, x, **kwargs):
@@ -248,7 +248,7 @@ class LightConv3x3TF(layers.Layer):
             use_bias=False,
             depth_multiplier=out_channels
         )
-        self.bn = layers.BatchNormalization(momentum=0.1, epsilon=1e-5)
+        self.bn = layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5)
         self.relu = layers.ReLU
 
     def call(self, x, **kwargs):
@@ -449,21 +449,21 @@ class OSBlockTF(layers.Layer):
         mid_channels = out_channels // bottleneck_reduction
         self.conv1 = Conv1x1TF(in_channels, mid_channels)
         self.conv2a = LightConv3x3TF(mid_channels, mid_channels)
-        self.conv2b = tf.keras.Sequential(
+        self.conv2b = tf.keras.Sequential([
             LightConv3x3TF(mid_channels, mid_channels),
             LightConv3x3TF(mid_channels, mid_channels),
-        )
-        self.conv2c = tf.keras.Sequential(
-            LightConv3x3TF(mid_channels, mid_channels),
-            LightConv3x3TF(mid_channels, mid_channels),
-            LightConv3x3TF(mid_channels, mid_channels),
-        )
-        self.conv2d = tf.keras.Sequential(
+        ])
+        self.conv2c = tf.keras.Sequential([
             LightConv3x3TF(mid_channels, mid_channels),
             LightConv3x3TF(mid_channels, mid_channels),
             LightConv3x3TF(mid_channels, mid_channels),
+        ])
+        self.conv2d = tf.keras.Sequential([
             LightConv3x3TF(mid_channels, mid_channels),
-        )
+            LightConv3x3TF(mid_channels, mid_channels),
+            LightConv3x3TF(mid_channels, mid_channels),
+            LightConv3x3TF(mid_channels, mid_channels),
+        ])
         self.gate = ChannelGateTF(mid_channels)
         self.conv3 = Conv1x1LinearTF(mid_channels, out_channels)
         self.downsample = None
@@ -729,13 +729,13 @@ class OSNetTF(tf.keras.Model):
 
         if reduce_spatial_size:
             m_layers.append(
-                tf.keras.Sequential(
+                tf.keras.Sequential([
                     Conv1x1TF(out_channels, out_channels),
                     layers.AvgPool2D(2, strides=2)
-                )
+                ])
             )
 
-        return tf.keras.Sequential(*m_layers)
+        return tf.keras.Sequential(m_layers)
 
     def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
         if fc_dims is None or fc_dims < 0:
@@ -748,15 +748,15 @@ class OSNetTF(tf.keras.Model):
         m_layers = []
         for dim in fc_dims:
             m_layers.append(layers.Dense(dim))
-            m_layers.append(layers.BatchNormalization(momentum=0.1, epsilon=1e-5))
-            m_layers.append(layers.ReLU)
+            m_layers.append(layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5))
+            m_layers.append(layers.ReLU())
             if dropout_p is not None:
                 m_layers.append(layers.Dropout(rate=dropout_p))
             input_dim = dim
 
         self.feature_dim = fc_dims[-1]
 
-        return tf.keras.Sequential(*m_layers)
+        return tf.keras.Sequential(m_layers)
 
     def _init_params(self):
         for m in self.layers:
@@ -789,7 +789,8 @@ class OSNetTF(tf.keras.Model):
         x = self.conv5(x)
         return x
 
-    def forward(self, x, return_featuremaps=False):
+    def call(self, x, **kwargs):
+        return_featuremaps = kwargs.get('return_featuremaps')
         x = self.featuremaps(x)
         if return_featuremaps:
             return x
