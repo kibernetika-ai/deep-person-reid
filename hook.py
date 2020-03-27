@@ -8,6 +8,9 @@ std = np.array([0.229, 0.224, 0.225]).reshape([3, 1, 1])
 idx_tensor = np.arange(0, 66)
 
 kd_tree = None
+PARAMS = {
+    'input_shape':  [256, 128]
+}
 
 
 def norm(img):
@@ -20,6 +23,20 @@ def denorm(x):
     return (x * std + mean) * 255
 
 
+def init_hook(ctx, **params):
+    PARAMS.update(params)
+    if isinstance(PARAMS['input_shape'], str):
+        PARAMS['input_shape'] = [int(x) for x in PARAMS['input_shape'].split(',')]
+
+    # Dry run
+    if len(ctx.drivers) > 1:
+        reid_driver = ctx.drivers[1]
+        input_name = list(reid_driver.inputs.keys())[0]
+        reid_driver.predict({input_name: np.random.randn(1, 3, *PARAMS['input_shape'])})
+    else:
+        process({'input': np.random.randn(480, 640, 3).astype(np.uint8)}, ctx)
+
+
 def process(inputs, ctx, **kwargs):
     original, is_video = helpers.load_image(inputs, 'input')
     image = original.copy()
@@ -30,9 +47,8 @@ def process(inputs, ctx, **kwargs):
         detect_driver = ctx.drivers[0]
         reid_driver = ctx.drivers[1]
 
-    reid_input_shape = list(reid_driver.inputs.values())[0]
+    # reid_input_shape = list(reid_driver.inputs.values())[0]
     input_name = list(reid_driver.inputs.keys())[0]
-    output_name = list(reid_driver.outputs.keys())[0]
 
     if detect_driver is not None:
         boxes = get_boxes(detect_driver, image, threshold=0.3)
@@ -42,13 +58,13 @@ def process(inputs, ctx, **kwargs):
     for box in boxes:
         box = box.astype(int)
         img = crop_by_box(image, box)
-        img = cv2.resize(img, tuple(reid_input_shape[-1:-3:-1]), interpolation=cv2.INTER_AREA)
+        img = cv2.resize(img, tuple(PARAMS['input_shape'][::-1]), interpolation=cv2.INTER_AREA)
 
         prepared = norm(img)
         prepared = np.expand_dims(prepared, axis=0)
         outputs = reid_driver.predict({input_name: prepared})
         global kd_tree
-        embedding = outputs[output_name]
+        embedding = list(outputs.values())[0]
         embedding = (embedding + 1.) / 2.
         if not kd_tree:
             kd_tree = neighbors.KDTree(embedding, metric='euclidean')

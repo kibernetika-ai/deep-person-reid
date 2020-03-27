@@ -4,22 +4,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-__all__ = [
-    'osnet_x1_0', 'osnet_x0_75', 'osnet_x0_5', 'osnet_x0_25', 'osnet_ibn_x1_0'
-]
-
-pretrained_urls = {
-    'osnet_x1_0':
-    'https://drive.google.com/uc?id=1LaG1EJpHrxdAxKnSCJ_i0u-nbxSAeiFY',
-    'osnet_x0_75':
-    'https://drive.google.com/uc?id=1uwA9fElHOk3ZogwbeY5GkLI6QPTX70Hq',
-    'osnet_x0_5':
-    'https://drive.google.com/uc?id=16DGLbZukvVYgINws8u8deSaOqjybZ83i',
-    'osnet_x0_25':
-    'https://drive.google.com/uc?id=1rb8UN5ZzPKRc_xvtHlyDh-cSz88YX9hs',
-    'osnet_ibn_x1_0':
-    'https://drive.google.com/uc?id=1sr90V6irlYYDd4_4ISU2iruoRG8J__6l'
-}
+import tensorflow as tf
+from tensorflow.keras import layers
 
 
 ##########
@@ -29,14 +15,14 @@ class ConvLayer(nn.Module):
     """Convolution layer (conv + bn + relu)."""
 
     def __init__(
-        self,
-        in_channels,
-        out_channels,
-        kernel_size,
-        stride=1,
-        padding=0,
-        groups=1,
-        IN=False
+            self,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride=1,
+            padding=0,
+            groups=1,
+            IN=False
     ):
         super(ConvLayer, self).__init__()
         self.conv = nn.Conv2d(
@@ -59,6 +45,33 @@ class ConvLayer(nn.Module):
         x = self.bn(x)
         x = self.relu(x)
         return x
+
+
+class ConvLayerTF(layers.Layer):
+    def __init__(
+            self,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride=1,
+            padding="SAME",
+            groups=1,
+    ):
+        super(ConvLayerTF, self).__init__()
+        self.conv = layers.Conv2D(
+            out_channels,
+            kernel_size,
+            strides=stride,
+            padding=padding,
+            use_bias=False,
+        )
+        self.bn = layers.BatchNormalization(axis=1)
+        self.relu = layers.ReLU()
+
+    def call(self, inputs, **kwargs):
+        x = self.conv(inputs)
+        x = self.bn(x)
+        return self.relu(x)
 
 
 class Conv1x1(nn.Module):
@@ -85,6 +98,28 @@ class Conv1x1(nn.Module):
         return x
 
 
+class Conv1x1TF(layers.Layer):
+    """1x1 convolution + bn + relu."""
+
+    def __init__(self, in_channels, out_channels, stride=1, groups=1):
+        super(Conv1x1TF, self).__init__()
+        self.conv = layers.Conv2D(
+            out_channels,
+            kernel_size=1,
+            strides=stride,
+            padding="SAME",
+            use_bias=False,
+        )
+        self.bn = layers.BatchNormalization(momentum=0.1, epsilon=1e-5)
+        self.relu = layers.ReLU()
+
+    def call(self, x, **kwargs):
+        x = self.conv(x)
+        x = self.bn(x)
+        x = self.relu(x)
+        return x
+
+
 class Conv1x1Linear(nn.Module):
     """1x1 convolution + bn (w/o non-linearity)."""
 
@@ -96,6 +131,22 @@ class Conv1x1Linear(nn.Module):
         self.bn = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        return x
+
+
+class Conv1x1LinearTF(layers.Layer):
+    """1x1 convolution + bn (w/o non-linearity)."""
+
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(Conv1x1LinearTF, self).__init__()
+        self.conv = layers.Conv2D(
+            out_channels, 1, strides=stride, padding="SAME", use_bias=False
+        )
+        self.bn = layers.BatchNormalization(momentum=0.1, epsilon=1e-5)
+
+    def call(self, x, **kwargs):
         x = self.conv(x)
         x = self.bn(x)
         return x
@@ -119,6 +170,28 @@ class Conv3x3(nn.Module):
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        x = self.relu(x)
+        return x
+
+
+class Conv3x3TF(layers.Layer):
+    """3x3 convolution + bn + relu."""
+
+    def __init__(self, in_channels, out_channels, stride=1, groups=1):
+        super(Conv3x3TF, self).__init__()
+        self.conv = layers.Conv2D(
+            out_channels,
+            kernel_size=3,
+            strides=stride,
+            padding="SAME",
+            use_bias=False,
+        )
+        self.bn = layers.BatchNormalization(momentum=0.1, epsilon=1e-5)
+        self.relu = layers.ReLU()
+
+    def call(self, x, **kwargs):
         x = self.conv(x)
         x = self.bn(x)
         x = self.relu(x)
@@ -156,6 +229,36 @@ class LightConv3x3(nn.Module):
         return x
 
 
+class LightConv3x3TF(layers.Layer):
+    """Lightweight 3x3 convolution.
+
+    1x1 (linear) + dw 3x3 (nonlinear).
+    """
+
+    def __init__(self, in_channels, out_channels):
+        super(LightConv3x3TF, self).__init__()
+        self.conv1 = layers.Conv2D(
+            out_channels, kernel_size=1, strides=1, padding="SAME", use_bias=False
+        )
+        self.conv2 = layers.SeparableConv2D(
+            out_channels,
+            kernel_size=3,
+            strides=1,
+            padding="SAME",
+            use_bias=False,
+            depth_multiplier=out_channels
+        )
+        self.bn = layers.BatchNormalization(momentum=0.1, epsilon=1e-5)
+        self.relu = layers.ReLU
+
+    def call(self, x, **kwargs):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        x = self.bn(x)
+        x = self.relu(x)
+        return x
+
+
 ##########
 # Building blocks for omni-scale feature learning
 ##########
@@ -163,13 +266,13 @@ class ChannelGate(nn.Module):
     """A mini-network that generates channel-wise gates conditioned on input tensor."""
 
     def __init__(
-        self,
-        in_channels,
-        num_gates=None,
-        return_gates=False,
-        gate_activation='sigmoid',
-        reduction=16,
-        layer_norm=False
+            self,
+            in_channels,
+            num_gates=None,
+            return_gates=False,
+            gate_activation='sigmoid',
+            reduction=16,
+            layer_norm=False
     ):
         super(ChannelGate, self).__init__()
         if num_gates is None:
@@ -220,16 +323,72 @@ class ChannelGate(nn.Module):
         return input * x
 
 
+class ChannelGateTF(layers.Layer):
+    """A mini-network that generates channel-wise gates conditioned on input tensor."""
+
+    def __init__(
+            self,
+            in_channels,
+            num_gates=None,
+            return_gates=False,
+            gate_activation='sigmoid',
+            reduction=16,
+    ):
+        super(ChannelGateTF, self).__init__()
+        if num_gates is None:
+            num_gates = in_channels
+        self.return_gates = return_gates
+        self.global_avgpool = layers.GlobalAvgPool2D()
+        self.fc1 = layers.Conv2D(
+            in_channels // reduction,
+            kernel_size=1,
+            use_bias=True,
+            padding="SAME",
+        )
+        self.norm1 = None
+        self.relu = layers.ReLU()
+        self.fc2 = layers.Conv2D(
+            num_gates,
+            kernel_size=1,
+            use_bias=True,
+            padding="SAME"
+        )
+        if gate_activation == 'sigmoid':
+            self.gate_activation = tf.keras.activations.sigmoid
+        elif gate_activation == 'relu':
+            self.gate_activation = layers.ReLU()
+        elif gate_activation == 'linear':
+            self.gate_activation = None
+        else:
+            raise RuntimeError(
+                "Unknown gate activation: {}".format(gate_activation)
+            )
+
+    def call(self, x, **kwargs):
+        input = x
+        x = self.global_avgpool(x)
+        x = self.fc1(x)
+        if self.norm1 is not None:
+            x = self.norm1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        if self.gate_activation is not None:
+            x = self.gate_activation(x)
+        if self.return_gates:
+            return x
+        return input * x
+
+
 class OSBlock(nn.Module):
     """Omni-scale feature learning block."""
 
     def __init__(
-        self,
-        in_channels,
-        out_channels,
-        IN=False,
-        bottleneck_reduction=4,
-        **kwargs
+            self,
+            in_channels,
+            out_channels,
+            IN=False,
+            bottleneck_reduction=4,
+            **kwargs
     ):
         super(OSBlock, self).__init__()
         mid_channels = out_channels // bottleneck_reduction
@@ -276,12 +435,77 @@ class OSBlock(nn.Module):
         return F.relu(out)
 
 
+class Sequential(layers.Layer):
+    def __init__(self, *layers):
+        super(Sequential, self).__init__()
+        self.layers = layers
+
+    def call(self, inputs, **kwargs):
+        x = inputs
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
+class OSBlockTF(layers.Layer):
+    """Omni-scale feature learning block."""
+
+    def __init__(
+            self,
+            in_channels,
+            out_channels,
+            bottleneck_reduction=4,
+            **kwargs
+    ):
+        super(OSBlockTF, self).__init__()
+        mid_channels = out_channels // bottleneck_reduction
+        self.conv1 = Conv1x1TF(in_channels, mid_channels)
+        self.conv2a = LightConv3x3TF(mid_channels, mid_channels)
+        self.conv2b = Sequential(
+            LightConv3x3TF(mid_channels, mid_channels),
+            LightConv3x3TF(mid_channels, mid_channels),
+        )
+        self.conv2c = Sequential(
+            LightConv3x3TF(mid_channels, mid_channels),
+            LightConv3x3TF(mid_channels, mid_channels),
+            LightConv3x3TF(mid_channels, mid_channels),
+        )
+        self.conv2d = Sequential(
+            LightConv3x3TF(mid_channels, mid_channels),
+            LightConv3x3TF(mid_channels, mid_channels),
+            LightConv3x3TF(mid_channels, mid_channels),
+            LightConv3x3TF(mid_channels, mid_channels),
+        )
+        self.gate = ChannelGateTF(mid_channels)
+        self.conv3 = Conv1x1LinearTF(mid_channels, out_channels)
+        self.downsample = None
+        if in_channels != out_channels:
+            self.downsample = Conv1x1LinearTF(in_channels, out_channels)
+        self.IN = None
+
+    def call(self, x, **kwargs):
+        identity = x
+        x1 = self.conv1(x)
+        x2a = self.conv2a(x1)
+        x2b = self.conv2b(x1)
+        x2c = self.conv2c(x1)
+        x2d = self.conv2d(x1)
+        x2 = self.gate(x2a) + self.gate(x2b) + self.gate(x2c) + self.gate(x2d)
+        x3 = self.conv3(x2)
+        if self.downsample is not None:
+            identity = self.downsample(identity)
+        out = x3 + identity
+        if self.IN is not None:
+            out = self.IN(out)
+        return tf.keras.activations.relu(out)
+
+
 ##########
 # Network architecture
 ##########
 class OSNet(nn.Module):
     """Omni-Scale Network.
-    
+
     Reference:
         - Zhou et al. Omni-Scale Feature Learning for Person Re-Identification. ICCV, 2019.
         - Zhou et al. Learning Generalisable Omni-Scale Representations
@@ -289,15 +513,15 @@ class OSNet(nn.Module):
     """
 
     def __init__(
-        self,
-        num_classes,
-        blocks,
-        layers,
-        channels,
-        feature_dim=512,
-        loss='softmax',
-        IN=False,
-        **kwargs
+            self,
+            num_classes,
+            blocks,
+            layers,
+            channels,
+            feature_dim=512,
+            loss='softmax',
+            IN=False,
+            **kwargs
     ):
         super(OSNet, self).__init__()
         num_blocks = len(blocks)
@@ -342,13 +566,13 @@ class OSNet(nn.Module):
         self._init_params()
 
     def _make_layer(
-        self,
-        block,
-        layer,
-        in_channels,
-        out_channels,
-        reduce_spatial_size,
-        IN=False
+            self,
+            block,
+            layer,
+            in_channels,
+            out_channels,
+            reduce_spatial_size,
+            IN=False
     ):
         layers = []
 
@@ -437,82 +661,164 @@ class OSNet(nn.Module):
             raise KeyError("Unsupported loss: {}".format(self.loss))
 
 
-def init_pretrained_weights(model, key=''):
-    """Initializes model with pretrained weights.
-    
-    Layers that don't match with pretrained layers in name or size are kept unchanged.
-    """
-    import os
-    import errno
-    import gdown
-    from collections import OrderedDict
+##########
+# Network architecture
+##########
+class OSNetTF(tf.keras.Model):
+    """Omni-Scale Network.
 
-    def _get_torch_home():
-        ENV_TORCH_HOME = 'TORCH_HOME'
-        ENV_XDG_CACHE_HOME = 'XDG_CACHE_HOME'
-        DEFAULT_CACHE_DIR = '~/.cache'
-        torch_home = os.path.expanduser(
-            os.getenv(
-                ENV_TORCH_HOME,
-                os.path.join(
-                    os.getenv(ENV_XDG_CACHE_HOME, DEFAULT_CACHE_DIR), 'torch'
+    Reference:
+        - Zhou et al. Omni-Scale Feature Learning for Person Re-Identification. ICCV, 2019.
+        - Zhou et al. Learning Generalisable Omni-Scale Representations
+          for Person Re-Identification. arXiv preprint, 2019.
+    """
+
+    def __init__(
+            self,
+            num_classes,
+            blocks,
+            m_layers,
+            channels,
+            feature_dim=512,
+            loss='softmax',
+            **kwargs
+    ):
+        super(OSNetTF, self).__init__()
+        num_blocks = len(blocks)
+        assert num_blocks == len(m_layers)
+        assert num_blocks == len(channels) - 1
+        self.loss = loss
+
+        # convolutional backbone
+        self.conv1 = ConvLayerTF(3, channels[0], 7, stride=2, padding="SAME")  # original padding=3
+        # self.maxpool = nn.MaxPool2d(3, stride=2, padding="SAME")  # original padding=1
+        self.maxpool = layers.MaxPool2D(3, strides=2, padding="SAME")  # original padding=1
+        self.conv2 = self._make_layer(
+            blocks[0],
+            m_layers[0],
+            channels[0],
+            channels[1],
+            reduce_spatial_size=True,
+        )
+        self.conv3 = self._make_layer(
+            blocks[1],
+            m_layers[1],
+            channels[1],
+            channels[2],
+            reduce_spatial_size=True
+        )
+        self.conv4 = self._make_layer(
+            blocks[2],
+            m_layers[2],
+            channels[2],
+            channels[3],
+            reduce_spatial_size=False
+        )
+        self.conv5 = Conv1x1TF(channels[3], channels[3])
+        self.global_avgpool = layers.GlobalAvgPool2D()
+        # fully connected layer
+        self.fc = self._construct_fc_layer(
+            feature_dim, channels[3], dropout_p=None
+        )
+        # identity classification layer
+        # self.classifier = nn.Linear(self.feature_dim, num_classes)
+        self.classifier = layers.Dense(num_classes)
+
+        # self._init_params()
+
+    def _make_layer(
+            self,
+            block,
+            layer,
+            in_channels,
+            out_channels,
+            reduce_spatial_size,
+    ):
+        m_layers = [block(in_channels, out_channels)]
+
+        for i in range(1, layer):
+            m_layers.append(block(out_channels, out_channels))
+
+        if reduce_spatial_size:
+            m_layers.append(
+                Sequential(
+                    Conv1x1TF(out_channels, out_channels),
+                    layers.AvgPool2D(2, strides=2)
                 )
             )
-        )
-        return torch_home
 
-    torch_home = _get_torch_home()
-    model_dir = os.path.join(torch_home, 'checkpoints')
-    try:
-        os.makedirs(model_dir)
-    except OSError as e:
-        if e.errno == errno.EEXIST:
-            # Directory already exists, ignore.
-            pass
+        return Sequential(*m_layers)
+
+    def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
+        if fc_dims is None or fc_dims < 0:
+            self.feature_dim = input_dim
+            return None
+
+        if isinstance(fc_dims, int):
+            fc_dims = [fc_dims]
+
+        m_layers = []
+        for dim in fc_dims:
+            m_layers.append(layers.Dense(dim))
+            m_layers.append(layers.BatchNormalization(momentum=0.1, epsilon=1e-5))
+            m_layers.append(layers.ReLU)
+            if dropout_p is not None:
+                m_layers.append(layers.Dropout(rate=dropout_p))
+            input_dim = dim
+
+        self.feature_dim = fc_dims[-1]
+
+        return Sequential(*m_layers)
+
+    def _init_params(self):
+        for m in self.layers:
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(
+                    m.weight, mode='fan_out', nonlinearity='relu'
+                )
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+            elif isinstance(m, nn.BatchNorm1d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+
+    def featuremaps(self, x):
+        x = self.conv1(x)
+        x = self.maxpool(x)
+        x = self.conv2(x)
+        x = self.conv3(x)
+        x = self.conv4(x)
+        x = self.conv5(x)
+        return x
+
+    def forward(self, x, return_featuremaps=False):
+        x = self.featuremaps(x)
+        if return_featuremaps:
+            return x
+        v = self.global_avgpool(x)
+        v = tf.reshape(v, [v.shape[0], -1])
+        # v = v.view(v.size(0), -1)
+        if self.fc is not None:
+            v = self.fc(v)
+        if not self.training:
+            return v
+        y = self.classifier(v)
+        if self.loss == 'softmax':
+            return y
+        elif self.loss == 'triplet':
+            return y, v
         else:
-            # Unexpected OSError, re-raise.
-            raise
-    filename = key + '_imagenet.pth'
-    cached_file = os.path.join(model_dir, filename)
-
-    if not os.path.exists(cached_file):
-        gdown.download(pretrained_urls[key], cached_file, quiet=False)
-
-    state_dict = torch.load(cached_file)
-    model_dict = model.state_dict()
-    new_state_dict = OrderedDict()
-    matched_layers, discarded_layers = [], []
-
-    for k, v in state_dict.items():
-        if k.startswith('module.'):
-            k = k[7:] # discard module.
-
-        if k in model_dict and model_dict[k].size() == v.size():
-            new_state_dict[k] = v
-            matched_layers.append(k)
-        else:
-            discarded_layers.append(k)
-
-    model_dict.update(new_state_dict)
-    model.load_state_dict(model_dict)
-
-    if len(matched_layers) == 0:
-        warnings.warn(
-            'The pretrained weights from "{}" cannot be loaded, '
-            'please check the key names manually '
-            '(** ignored and continue **)'.format(cached_file)
-        )
-    else:
-        print(
-            'Successfully loaded imagenet pretrained weights from "{}"'.
-            format(cached_file)
-        )
-        if len(discarded_layers) > 0:
-            print(
-                '** The following layers are discarded '
-                'due to unmatched keys or layer size: {}'.
-                format(discarded_layers)
-            )
+            raise KeyError("Unsupported loss: {}".format(self.loss))
 
 
 ##########
@@ -528,8 +834,8 @@ def osnet_x1_0(num_classes=1000, pretrained=True, loss='softmax', **kwargs):
         loss=loss,
         **kwargs
     )
-    if pretrained:
-        init_pretrained_weights(model, key='osnet_x1_0')
+    # if pretrained:
+    #     init_pretrained_weights(model, key='osnet_x1_0')
     return model
 
 
@@ -543,8 +849,8 @@ def osnet_x1_0_fixed(num_classes=751, pretrained=False, loss='softmax', **kwargs
         loss=loss,
         **kwargs
     )
-    if pretrained:
-        init_pretrained_weights(model, key='osnet_x1_0')
+    # if pretrained:
+    #     init_pretrained_weights(model, key='osnet_x1_0')
     return model
 
 
@@ -558,8 +864,8 @@ def osnet_x0_75(num_classes=1000, pretrained=True, loss='softmax', **kwargs):
         loss=loss,
         **kwargs
     )
-    if pretrained:
-        init_pretrained_weights(model, key='osnet_x0_75')
+    # if pretrained:
+    #     init_pretrained_weights(model, key='osnet_x0_75')
     return model
 
 
@@ -573,8 +879,8 @@ def osnet_x0_5(num_classes=1000, pretrained=True, loss='softmax', **kwargs):
         loss=loss,
         **kwargs
     )
-    if pretrained:
-        init_pretrained_weights(model, key='osnet_x0_5')
+    # if pretrained:
+    #     init_pretrained_weights(model, key='osnet_x0_5')
     return model
 
 
@@ -588,8 +894,8 @@ def osnet_x0_25(num_classes=1000, pretrained=True, loss='softmax', **kwargs):
         loss=loss,
         **kwargs
     )
-    if pretrained:
-        init_pretrained_weights(model, key='osnet_x0_25')
+    # if pretrained:
+    #     init_pretrained_weights(model, key='osnet_x0_25')
     return model
 
 
@@ -603,13 +909,13 @@ def osnet_x0_25_fixed(num_classes=751, pretrained=False, loss='softmax', **kwarg
         loss=loss,
         **kwargs
     )
-    if pretrained:
-        init_pretrained_weights(model, key='osnet_x0_25')
+    # if pretrained:
+    #     init_pretrained_weights(model, key='osnet_x0_25')
     return model
 
 
 def osnet_ibn_x1_0(
-    num_classes=1000, pretrained=True, loss='softmax', **kwargs
+        num_classes=1000, pretrained=True, loss='softmax', **kwargs
 ):
     # standard size (width x1.0) + IBN layer
     # Ref: Pan et al. Two at Once: Enhancing Learning and Generalization Capacities via IBN-Net. ECCV, 2018.
@@ -622,6 +928,6 @@ def osnet_ibn_x1_0(
         IN=True,
         **kwargs
     )
-    if pretrained:
-        init_pretrained_weights(model, key='osnet_ibn_x1_0')
+    # if pretrained:
+    #     init_pretrained_weights(model, key='osnet_ibn_x1_0')
     return model
