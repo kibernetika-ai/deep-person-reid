@@ -67,7 +67,7 @@ class Market1501Dataset:
 
 def preprocess(image_path, label):
     raw_content = tf.io.read_file(image_path)
-    image = tf.image.decode_image(raw_content, channels=3)
+    image = tf.image.decode_jpeg(raw_content, channels=3)
     image = tf.image.convert_image_dtype(image, tf.float32)
     # resize the image to the desired size.
     image = tf.image.resize(image, [256, 128])
@@ -89,32 +89,41 @@ def main():
         ),
         metrics=['accuracy']
     )
-    config_proto = tf.compat.v1.ConfigProto(log_device_placement=True)
-    config = tf.estimator.RunConfig(
-        model_dir=args.model_dir,
-        save_summary_steps=100,
-        keep_checkpoint_max=5,
-        log_step_count_steps=10,
-        session_config=config_proto,
-    )
-    estimator_model = tf.keras.estimator.model_to_estimator(
-        keras_model=model,
-        model_dir=args.model_dir,
-        config=config,
-        checkpoint_format='saver',
-    )
-
     mode = args.mode
+
     if mode == 'train':
-        estimator_model.train(
-            input_fn=dataset.get_input_fn,
-            steps=args.steps,
+        history = model.fit(
+            x=dataset.get_input_fn(),
+            # batch_size=args.batch_size,
+            epochs=1,
         )
-    elif mode == 'export':
-        saved_path = estimator_model.export_saved_model(
-            args.model_dir,
-        )
-        print(f'Saved to {saved_path}.')
+        print(history)
+
+    # config_proto = tf.compat.v1.ConfigProto(log_device_placement=True)
+    # config = tf.estimator.RunConfig(
+    #     model_dir=args.model_dir,
+    #     save_summary_steps=100,
+    #     keep_checkpoint_max=5,
+    #     log_step_count_steps=10,
+    #     session_config=config_proto,
+    # )
+    # estimator_model = tf.keras.estimator.model_to_estimator(
+    #     keras_model=model,
+    #     model_dir=args.model_dir,
+    #     config=config,
+    #     checkpoint_format='saver',
+    # )
+    #
+    # if mode == 'train':
+    #     estimator_model.train(
+    #         input_fn=dataset.get_input_fn,
+    #         steps=args.steps,
+    #     )
+    # elif mode == 'export':
+    #     saved_path = estimator_model.export_saved_model(
+    #         args.model_dir,
+    #     )
+    #     print(f'Saved to {saved_path}.')
 
 
 if __name__ == '__main__':
