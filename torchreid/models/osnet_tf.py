@@ -249,7 +249,7 @@ class LightConv3x3TF(layers.Layer):
             depth_multiplier=out_channels
         )
         self.bn = layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5)
-        self.relu = layers.ReLU
+        self.relu = layers.ReLU()
 
     def call(self, x, **kwargs):
         x = self.conv1(x)
