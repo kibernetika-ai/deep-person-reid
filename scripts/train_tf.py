@@ -2,7 +2,9 @@ import argparse
 import glob
 import re
 import os
+import sys
 
+import numpy as np
 import tensorflow as tf
 
 from torchreid.models import osnet_tf
@@ -62,7 +64,7 @@ class Market1501Dataset:
 
     def get_input_fn(self):
         dataset = tf.data.Dataset.from_tensor_slices((self.paths, self.pids))
-        return dataset.map(preprocess).batch(self.batch_size)
+        return dataset.map(preprocess).batch(self.batch_size).shuffle(self.batch_size * 2)
 
     def num_classes(self):
         return len(set(self.pids))
@@ -127,13 +129,29 @@ class CrossEntropyLoss(tf.keras.losses.Loss):
         return tf.reduce_sum(tf.reduce_mean(-targets * log_probs, axis=0))
 
 
+class Scheduler:
+    def __init__(self, initial_learning_rate=0.05, epochs=10):
+        self.epochs = epochs
+        self.learning_rate = initial_learning_rate
+
+    def schedule(self, epoch):
+        if epoch <= 0.3 * self.epochs:
+            return self.learning_rate
+        elif epoch <= 0.5 * self.epochs:
+            return self.learning_rate / 5
+        elif epoch <= 0.75 * self.epochs:
+            return self.learning_rate / 25
+        else:
+            return self.learning_rate / 125
+
+
 def main():
     args = parse_args()
     dataset = Market1501Dataset(args.data_dir, args.mode, args.batch_size)
     model = osnet_tf.osnet_x0_25(num_classes=dataset.num_classes())
 
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+        optimizer=tf.keras.optimizers.Adam(clipvalue=1.0),
         # loss=CrossEntropyLoss(num_classes=dataset.num_classes(), batch_size=args.batch_size),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         metrics=['accuracy']
@@ -141,15 +159,20 @@ def main():
     mode = args.mode
 
     if mode == 'train':
-        history = model.fit(
+        scheduler = Scheduler(initial_learning_rate=0.05, epochs=args.epochs)
+        model.fit(
             x=dataset.get_input_fn(),
             # batch_size=args.batch_size,
             epochs=args.epochs,
+            verbose=1 if sys.stdout.isatty() else 2,
+            callbacks=[
+                tf.keras.callbacks.LearningRateScheduler(scheduler.schedule, verbose=1)
+            ]
         )
-        print(history)
         model.save_weights(os.path.join(args.model_dir, 'checkpoint'), save_format='tf')
     elif mode == 'export':
         model.load_weights(os.path.join(args.model_dir, 'checkpoint'))
+        model._set_inputs(np.zeros([1, 256, 128, 3], dtype=np.float))
         model.save(args.output, save_format='tf')
         print(f'Saved to {args.output}')
 
