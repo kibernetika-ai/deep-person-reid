@@ -6,6 +6,7 @@ import os
 import tensorflow as tf
 
 from torchreid.models import osnet_tf
+from torchreid.utils import utils
 
 
 def parse_args():
@@ -101,14 +102,12 @@ class CrossEntropyLoss(tf.keras.losses.Loss):
         label_smooth (bool, optional): whether to apply label smoothing. Default is True.
     """
 
-    def __init__(
-            self, num_classes, epsilon=0.1, use_gpu=True, label_smooth=True
-    ):
+    def __init__(self, num_classes, batch_size, epsilon=0.1, label_smooth=True):
         super(CrossEntropyLoss, self).__init__()
         self.num_classes = num_classes
         self.epsilon = epsilon if label_smooth else 0
-        self.use_gpu = use_gpu
         self.logsoftmax = tf.nn.log_softmax
+        self.batch_size = batch_size
 
     def call(self, y_true, y_pred):
         """
@@ -119,12 +118,13 @@ class CrossEntropyLoss(tf.keras.losses.Loss):
                 Each position contains the label index.
         """
         log_probs = self.logsoftmax(y_pred, axis=1)
-        zeros = tf.zeros(log_probs.shape)
-        targets = tf.scatter_nd(tf.expand_dims(y_true, 1), 1, 1)
+        zeros = tf.zeros([self.batch_size, self.num_classes])
+        # targets = utils.scatter_numpy(zeros.numpy(), 1, tf.expand_dims(y_true, 1).numpy(), 1)
+        targets = tf.scatter_nd(tf.expand_dims(y_true, 1), 1, [self.batch_size, self.num_classes])
         # if self.use_gpu:
         #     targets = targets.cuda()
         targets = (1 - self.epsilon) * targets + self.epsilon / self.num_classes
-        return (-targets * log_probs).mean(0).sum()
+        return tf.reduce_sum(tf.reduce_mean(-targets * log_probs, axis=0))
 
 
 def main():
@@ -133,12 +133,9 @@ def main():
     model = osnet_tf.osnet_x0_25(num_classes=dataset.num_classes())
 
     model.compile(
-        optimizer='adam',
-        loss=tf.keras.losses.CategoricalCrossentropy(
-            from_logits=True,
-            label_smoothing=0.1,
-        ),
-        # loss=tf.keras.losses.MeanSquaredError(),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
+        # loss=CrossEntropyLoss(num_classes=dataset.num_classes(), batch_size=args.batch_size),
+        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         metrics=['accuracy']
     )
     mode = args.mode
