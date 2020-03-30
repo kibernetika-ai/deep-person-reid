@@ -125,8 +125,8 @@ class ImageSoftmaxEngine(Engine):
             if (batch_idx+1) % print_freq == 0:
                 # estimate remaining time
                 eta_seconds = batch_time.avg * (
-                    num_batches - (batch_idx+1) + (max_epoch -
-                                                   (epoch+1)) * num_batches
+                        num_batches - (batch_idx+1) + (max_epoch -
+                                                       (epoch+1)) * num_batches
                 )
                 eta_str = str(datetime.timedelta(seconds=int(eta_seconds)))
                 print(

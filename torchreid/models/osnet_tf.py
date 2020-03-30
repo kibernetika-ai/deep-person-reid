@@ -338,7 +338,8 @@ class ChannelGateTF(layers.Layer):
         if num_gates is None:
             num_gates = in_channels
         self.return_gates = return_gates
-        self.global_avgpool = layers.GlobalAvgPool2D()
+        # self.global_avgpool = layers.GlobalAvgPool2D()
+        self.global_avgpool = layers.AveragePooling2D(1)
         self.fc1 = layers.Conv2D(
             in_channels // reduction,
             kernel_size=1,
@@ -676,6 +677,7 @@ class OSNetTF(tf.keras.Model):
         assert num_blocks == len(m_layers)
         assert num_blocks == len(channels) - 1
         self.loss = loss
+        self.channels = channels
 
         # convolutional backbone
         self.conv1 = ConvLayerTF(3, channels[0], 7, stride=2, padding="SAME")  # original padding=3
@@ -795,19 +797,15 @@ class OSNetTF(tf.keras.Model):
         if return_featuremaps:
             return x
         v = self.global_avgpool(x)
-        v = tf.reshape(v, [v.shape[0], -1])
+        v = layers.Reshape([self.channels[-1]])(v)
+        # v = tf.reshape(v, [v.shape[0], -1])
         # v = v.view(v.size(0), -1)
         if self.fc is not None:
             v = self.fc(v)
-        if not self.training:
+        if not self.trainable:
             return v
         y = self.classifier(v)
-        if self.loss == 'softmax':
-            return y
-        elif self.loss == 'triplet':
-            return y, v
-        else:
-            raise KeyError("Unsupported loss: {}".format(self.loss))
+        return y
 
 
 ##########

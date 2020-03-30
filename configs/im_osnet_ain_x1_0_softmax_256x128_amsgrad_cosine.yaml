@@ -30,7 +30,7 @@ test:
   batch_size: 300
   dist_metric: 'cosine'
   normalize_feature: False
-  evaluate: True
+  evaluate: False
   eval_freq: -1
   rerank: False
   visactmap: False

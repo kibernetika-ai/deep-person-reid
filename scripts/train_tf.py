@@ -14,9 +14,11 @@ def parse_args():
     parser.add_argument('--batch-size', type=int, default=16)
     parser.add_argument('--mode', default='train')
     parser.add_argument('--model-dir', default='train')
+    parser.add_argument('--output', default='saved_model')
     parser.add_argument('--data-dir')
     parser.add_argument('--dataset-name')
     parser.add_argument('--steps', type=int, default=1000)
+    parser.add_argument('--epochs', type=int, default=5)
 
     return parser.parse_args()
 
@@ -76,6 +78,55 @@ def preprocess(image_path, label):
     return image, label
 
 
+class CrossEntropyLoss(tf.keras.losses.Loss):
+    r"""Cross entropy loss with label smoothing regularizer.
+
+    Reference:
+        Szegedy et al. Rethinking the Inception Architecture for Computer Vision. CVPR 2016.
+
+    With label smoothing, the label :math:`y` for a class is computed by
+
+    .. math::
+        \begin{equation}
+        (1 - \epsilon) \times y + \frac{\epsilon}{K},
+        \end{equation}
+
+    where :math:`K` denotes the number of classes and :math:`\epsilon` is a weight. When
+    :math:`\epsilon = 0`, the loss function reduces to the normal cross entropy.
+
+    Args:
+        num_classes (int): number of classes.
+        epsilon (float, optional): weight. Default is 0.1.
+        use_gpu (bool, optional): whether to use gpu devices. Default is True.
+        label_smooth (bool, optional): whether to apply label smoothing. Default is True.
+    """
+
+    def __init__(
+            self, num_classes, epsilon=0.1, use_gpu=True, label_smooth=True
+    ):
+        super(CrossEntropyLoss, self).__init__()
+        self.num_classes = num_classes
+        self.epsilon = epsilon if label_smooth else 0
+        self.use_gpu = use_gpu
+        self.logsoftmax = tf.nn.log_softmax
+
+    def call(self, y_true, y_pred):
+        """
+        Args:
+            y_pred (torch.Tensor): prediction matrix (before softmax) with
+                shape (batch_size, num_classes).
+            y_true (torch.LongTensor): ground truth labels with shape (batch_size).
+                Each position contains the label index.
+        """
+        log_probs = self.logsoftmax(y_pred, axis=1)
+        zeros = tf.zeros(log_probs.shape)
+        targets = tf.scatter_nd(tf.expand_dims(y_true, 1), 1, 1)
+        # if self.use_gpu:
+        #     targets = targets.cuda()
+        targets = (1 - self.epsilon) * targets + self.epsilon / self.num_classes
+        return (-targets * log_probs).mean(0).sum()
+
+
 def main():
     args = parse_args()
     dataset = Market1501Dataset(args.data_dir, args.mode, args.batch_size)
@@ -87,6 +138,7 @@ def main():
             from_logits=True,
             label_smoothing=0.1,
         ),
+        # loss=tf.keras.losses.MeanSquaredError(),
         metrics=['accuracy']
     )
     mode = args.mode
@@ -95,9 +147,14 @@ def main():
         history = model.fit(
             x=dataset.get_input_fn(),
             # batch_size=args.batch_size,
-            epochs=1,
+            epochs=args.epochs,
         )
         print(history)
+        model.save_weights(os.path.join(args.model_dir, 'checkpoint'), save_format='tf')
+    elif mode == 'export':
+        model.load_weights(os.path.join(args.model_dir, 'checkpoint'))
+        model.save(args.output, save_format='tf')
+        print(f'Saved to {args.output}')
 
     # config_proto = tf.compat.v1.ConfigProto(log_device_placement=True)
     # config = tf.estimator.RunConfig(
