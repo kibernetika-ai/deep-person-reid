@@ -15,6 +15,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--batch-size', type=int, default=16)
+    parser.add_argument('--lr', type=float, default=0.05)
     parser.add_argument('--mode', default='train')
     parser.add_argument('--model-dir', default='train')
     parser.add_argument('--output', default='saved_model')
@@ -140,9 +141,9 @@ class Scheduler:
         elif epoch <= 0.5 * self.epochs:
             return self.learning_rate / 5
         elif epoch <= 0.75 * self.epochs:
-            return self.learning_rate / 25
+            return self.learning_rate / 50
         else:
-            return self.learning_rate / 125
+            return self.learning_rate / 500
 
 
 def main():
@@ -153,26 +154,30 @@ def main():
     model.compile(
         optimizer=tf.keras.optimizers.Adam(clipvalue=1.0),
         # loss=CrossEntropyLoss(num_classes=dataset.num_classes(), batch_size=args.batch_size),
-        loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+        loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), None],
+        # loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)],
         metrics=['accuracy']
     )
     mode = args.mode
 
     if mode == 'train':
-        scheduler = Scheduler(initial_learning_rate=0.05, epochs=args.epochs)
+        scheduler = Scheduler(initial_learning_rate=args.lr, epochs=args.epochs)
         model.fit(
             x=dataset.get_input_fn(),
             # batch_size=args.batch_size,
             epochs=args.epochs,
             verbose=1 if sys.stdout.isatty() else 2,
             callbacks=[
-                tf.keras.callbacks.LearningRateScheduler(scheduler.schedule, verbose=1)
+                tf.keras.callbacks.LearningRateScheduler(scheduler.schedule, verbose=1),
+                tf.keras.callbacks.TensorBoard(log_dir=args.model_dir, update_freq=50),
             ]
         )
         model.save_weights(os.path.join(args.model_dir, 'checkpoint'), save_format='tf')
     elif mode == 'export':
         model.load_weights(os.path.join(args.model_dir, 'checkpoint'))
         model._set_inputs(np.zeros([1, 256, 128, 3], dtype=np.float))
+        # model.outputs = [model.outputs[1]]
+        # model.output_names = [model.output_names[1]]
         model.save(args.output, save_format='tf')
         print(f'Saved to {args.output}')
 

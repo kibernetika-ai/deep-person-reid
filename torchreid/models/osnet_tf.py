@@ -65,13 +65,15 @@ class ConvLayerTF(layers.Layer):
             padding=padding,
             use_bias=False,
         )
-        self.bn = layers.BatchNormalization(axis=1, epsilon=1e-5, momentum=0.1)
+        # self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
+        self.bn = layers.BatchNormalization(axis=3)
         self.relu = layers.ReLU()
 
     def call(self, inputs, **kwargs):
         x = self.conv(inputs)
         x = self.bn(x)
-        return self.relu(x)
+        x = self.relu(x)
+        return x
 
 
 class Conv1x1(nn.Module):
@@ -110,7 +112,8 @@ class Conv1x1TF(layers.Layer):
             padding="SAME",
             use_bias=False,
         )
-        self.bn = layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5)
+        # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
+        self.bn = layers.BatchNormalization(axis=3)
         self.relu = layers.ReLU()
 
     def call(self, x, **kwargs):
@@ -144,7 +147,8 @@ class Conv1x1LinearTF(layers.Layer):
         self.conv = layers.Conv2D(
             out_channels, 1, strides=stride, padding="SAME", use_bias=False
         )
-        self.bn = layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5)
+        # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
+        self.bn = layers.BatchNormalization(axis=3)
 
     def call(self, x, **kwargs):
         x = self.conv(x)
@@ -188,7 +192,8 @@ class Conv3x3TF(layers.Layer):
             padding="SAME",
             use_bias=False,
         )
-        self.bn = layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5)
+        # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
+        self.bn = layers.BatchNormalization(axis=3)
         self.relu = layers.ReLU()
 
     def call(self, x, **kwargs):
@@ -248,7 +253,8 @@ class LightConv3x3TF(layers.Layer):
             use_bias=False,
             depth_multiplier=out_channels
         )
-        self.bn = layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5)
+        # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
+        self.bn = layers.BatchNormalization(axis=3)
         self.relu = layers.ReLU()
 
     def call(self, x, **kwargs):
@@ -337,9 +343,10 @@ class ChannelGateTF(layers.Layer):
         super(ChannelGateTF, self).__init__()
         if num_gates is None:
             num_gates = in_channels
+        self.in_channels = in_channels
         self.return_gates = return_gates
-        # self.global_avgpool = layers.GlobalAvgPool2D()
-        self.global_avgpool = layers.AveragePooling2D(1)
+        self.global_avgpool = layers.GlobalAvgPool2D()
+        # self.global_avgpool = layers.AveragePooling2D(1)
         self.fc1 = layers.Conv2D(
             in_channels // reduction,
             kernel_size=1,
@@ -368,6 +375,7 @@ class ChannelGateTF(layers.Layer):
     def call(self, x, **kwargs):
         input = x
         x = self.global_avgpool(x)
+        x = layers.Reshape([1, 1, self.in_channels])(x)
         x = self.fc1(x)
         if self.norm1 is not None:
             x = self.norm1(x)
@@ -750,7 +758,9 @@ class OSNetTF(tf.keras.Model):
         m_layers = []
         for dim in fc_dims:
             m_layers.append(layers.Dense(dim))
-            m_layers.append(layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5))
+            # 2 Dimensions: [batch, channels], need normalization on channels
+            # m_layers.append(layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5))
+            m_layers.append(layers.BatchNormalization(axis=1))
             m_layers.append(layers.ReLU())
             if dropout_p is not None:
                 m_layers.append(layers.Dropout(rate=dropout_p))
@@ -760,27 +770,27 @@ class OSNetTF(tf.keras.Model):
 
         return tf.keras.Sequential(m_layers)
 
-    def _init_params(self):
-        for m in self.layers:
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(
-                    m.weight, mode='fan_out', nonlinearity='relu'
-                )
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-
-            elif isinstance(m, nn.BatchNorm1d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-
-            elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
+    # def _init_params(self):
+    #     for m in self.layers:
+    #         if isinstance(m, nn.Conv2d):
+    #             nn.init.kaiming_normal_(
+    #                 m.weight, mode='fan_out', nonlinearity='relu'
+    #             )
+    #             if m.bias is not None:
+    #                 nn.init.constant_(m.bias, 0)
+    #
+    #         elif isinstance(m, nn.BatchNorm2d):
+    #             nn.init.constant_(m.weight, 1)
+    #             nn.init.constant_(m.bias, 0)
+    #
+    #         elif isinstance(m, nn.BatchNorm1d):
+    #             nn.init.constant_(m.weight, 1)
+    #             nn.init.constant_(m.bias, 0)
+    #
+    #         elif isinstance(m, nn.Linear):
+    #             nn.init.normal_(m.weight, 0, 0.01)
+    #             if m.bias is not None:
+    #                 nn.init.constant_(m.bias, 0)
 
     def featuremaps(self, x):
         x = self.conv1(x)
@@ -805,7 +815,7 @@ class OSNetTF(tf.keras.Model):
         if not self.trainable:
             return v
         y = self.classifier(v)
-        return y
+        return y, v
 
 
 ##########
