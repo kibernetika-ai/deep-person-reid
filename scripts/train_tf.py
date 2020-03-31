@@ -152,7 +152,7 @@ def main():
     model = osnet_tf.osnet_x0_25(num_classes=dataset.num_classes())
 
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(clipvalue=1.0),
+        optimizer=tf.keras.optimizers.Adam(clipvalue=1.0, amsgrad=True),
         # loss=CrossEntropyLoss(num_classes=dataset.num_classes(), batch_size=args.batch_size),
         loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), None],
         # loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)],
