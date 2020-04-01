@@ -66,7 +66,7 @@ class ConvLayerTF(layers.Layer):
             use_bias=False,
         )
         # self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
-        self.bn = layers.BatchNormalization(axis=3)
+        self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
         self.relu = layers.ReLU()
 
     def call(self, inputs, **kwargs):
@@ -113,7 +113,7 @@ class Conv1x1TF(layers.Layer):
             use_bias=False,
         )
         # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
-        self.bn = layers.BatchNormalization(axis=3)
+        self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
         self.relu = layers.ReLU()
 
     def call(self, x, **kwargs):
@@ -148,7 +148,7 @@ class Conv1x1LinearTF(layers.Layer):
             out_channels, 1, strides=stride, padding="SAME", use_bias=False
         )
         # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
-        self.bn = layers.BatchNormalization(axis=3)
+        self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
 
     def call(self, x, **kwargs):
         x = self.conv(x)
@@ -193,7 +193,7 @@ class Conv3x3TF(layers.Layer):
             use_bias=False,
         )
         # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
-        self.bn = layers.BatchNormalization(axis=3)
+        self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
         self.relu = layers.ReLU()
 
     def call(self, x, **kwargs):
@@ -254,7 +254,7 @@ class LightConv3x3TF(layers.Layer):
             depth_multiplier=out_channels
         )
         # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
-        self.bn = layers.BatchNormalization(axis=3)
+        self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
         self.relu = layers.ReLU()
 
     def call(self, x, **kwargs):
@@ -760,7 +760,7 @@ class OSNetTF(tf.keras.Model):
             m_layers.append(layers.Dense(dim))
             # 2 Dimensions: [batch, channels], need normalization on channels
             # m_layers.append(layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5))
-            m_layers.append(layers.BatchNormalization(axis=1))
+            m_layers.append(layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5))
             m_layers.append(layers.ReLU())
             if dropout_p is not None:
                 m_layers.append(layers.Dropout(rate=dropout_p))

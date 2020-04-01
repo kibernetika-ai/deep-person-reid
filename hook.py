@@ -9,12 +9,14 @@ idx_tensor = np.arange(0, 66)
 
 kd_tree = None
 PARAMS = {
-    'input_shape':  [256, 128]
+    'input_shape':  [256, 128],
+    'driver_type': 'pytorch'
 }
 
 
-def norm(img):
-    img = img.transpose([2, 0, 1])
+def norm(img, need_transpose=True):
+    if need_transpose:
+        img = img.transpose([2, 0, 1])
     img = img / 255.0
     return (img - mean) / std
 
@@ -32,7 +34,15 @@ def init_hook(ctx, **params):
     if len(ctx.drivers) > 1:
         reid_driver = ctx.drivers[1]
         input_name = list(reid_driver.inputs.keys())[0]
-        reid_driver.predict({input_name: np.random.randn(1, 3, *PARAMS['input_shape'])})
+        if PARAMS['driver_type'] == 'pytorch':
+            shape = 1, 3, *PARAMS['input_shape']
+        else:
+            shape = 1, *PARAMS['input_shape'], 3
+            global mean
+            global std
+            mean = mean.reshape([1, 1, 3])
+            std = std.reshape([1, 1, 3])
+        reid_driver.predict({input_name: np.random.randn(*shape)})
     else:
         process({'input': np.random.randn(480, 640, 3).astype(np.uint8)}, ctx)
 
@@ -60,7 +70,7 @@ def process(inputs, ctx, **kwargs):
         img = crop_by_box(image, box)
         img = cv2.resize(img, tuple(PARAMS['input_shape'][::-1]), interpolation=cv2.INTER_AREA)
 
-        prepared = norm(img)
+        prepared = norm(img, need_transpose=PARAMS['driver_type'] == 'pytorch')
         prepared = np.expand_dims(prepared, axis=0)
         outputs = reid_driver.predict({input_name: prepared})
         global kd_tree
