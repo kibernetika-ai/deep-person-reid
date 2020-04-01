@@ -72,13 +72,18 @@ class Market1501Dataset:
         return len(set(self.pids))
 
 
+mean = np.array([0.485, 0.456, 0.406]).reshape([1, 1, 3])
+std = np.array([0.229, 0.224, 0.225]).reshape([1, 1, 3])
+
+
 def preprocess(image_path, label):
     raw_content = tf.io.read_file(image_path)
     image = tf.image.decode_jpeg(raw_content, channels=3)
     image = tf.image.convert_image_dtype(image, tf.float32)
     # resize the image to the desired size.
     image = tf.image.resize(image, [256, 128])
-    image = (image / 127.5) - 1
+    image = image / 255.0
+    image = (image - mean) / std
     # image = tf.image.resize(image, (256, 128))
     return image, label
 
@@ -174,6 +179,7 @@ def main():
             ]
         )
         model.save_weights(os.path.join(args.model_dir, 'checkpoint'), save_format='tf')
+        print(f'Checkpoint is saved to {args.model_dir}.')
 
     if mode == 'export' or args.export:
         model.load_weights(os.path.join(args.model_dir, 'checkpoint'))
