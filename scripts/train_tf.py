@@ -35,6 +35,7 @@ class Market1501Dataset:
         relabel = mode == 'train'
         data_dir = data_dir.rstrip('/')
         img_paths = glob.glob(data_dir + '/bounding_box_train/*.jpg')
+        test_img_paths = glob.glob(data_dir + '/bounding_box_test/*.jpg')
         pattern = re.compile(r'([-\d]+)_c(\d)')
 
         pid_container = set()
@@ -48,25 +49,37 @@ class Market1501Dataset:
 
         paths = []
         pids = []
+        test_paths = []
+        test_pids = []
         for img_path in img_paths:
             pid, camid = map(int, pattern.search(img_path).groups())
             if pid == -1:
                 continue  # junk images are just ignored
-            assert 0 <= pid <= 1501  # pid == 0 means background
-            assert 1 <= camid <= 6
-            camid -= 1  # index starts from 0
             if relabel:
                 pid = pid2label[pid]
             data.append((img_path, pid))
             paths.append(img_path)
             pids.append(pid)
 
+        for img_path in test_img_paths:
+            pid, camid = map(int, pattern.search(img_path).groups())
+            if pid == -1:
+                continue  # junk images are just ignored
+            test_paths.append(img_path)
+            test_pids.append(pid)
+
         self.paths = paths
         self.pids = pids
+        self.test_paths = test_paths
+        self.test_pids = test_pids
 
     def get_input_fn(self):
         dataset = tf.data.Dataset.from_tensor_slices((self.paths, self.pids))
         return dataset.map(preprocess).batch(self.batch_size).shuffle(self.batch_size * 2)
+
+    def get_test_input_fn(self):
+        dataset = tf.data.Dataset.from_tensor_slices((self.test_paths, self.test_pids))
+        return dataset.map(preprocess).batch(self.batch_size)
 
     def num_classes(self):
         return len(set(self.pids))
@@ -127,9 +140,15 @@ class CrossEntropyLoss(tf.keras.losses.Loss):
                 Each position contains the label index.
         """
         log_probs = self.logsoftmax(y_pred, axis=1)
-        zeros = tf.zeros([self.batch_size, self.num_classes])
         # targets = utils.scatter_numpy(zeros.numpy(), 1, tf.expand_dims(y_true, 1).numpy(), 1)
-        targets = tf.scatter_nd(tf.expand_dims(y_true, 1), 1, [self.batch_size, self.num_classes])
+        expanded = tf.expand_dims(tf.squeeze(y_true), 1)
+        expanded = tf.cast(expanded, tf.int32)
+        # tf.scatter_nd([[0,0],[1,1],[2,2],[3,3],[4,4]], np.ones([5]), [5, 10])
+        targets = tf.scatter_nd(
+            tf.concat((tf.expand_dims(tf.range(self.batch_size), 1), expanded), axis=1),
+            tf.ones([self.batch_size]),
+            [self.batch_size, self.num_classes]
+        )
         # if self.use_gpu:
         #     targets = targets.cuda()
         targets = (1 - self.epsilon) * targets + self.epsilon / self.num_classes
@@ -158,10 +177,9 @@ def main():
     model = osnet_tf.osnet_x0_25(num_classes=dataset.num_classes())
 
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(clipvalue=1.0, amsgrad=True),
-        # loss=CrossEntropyLoss(num_classes=dataset.num_classes(), batch_size=args.batch_size),
-        loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), None],
-        # loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)],
+        optimizer=tf.keras.optimizers.Adam(amsgrad=True),
+        loss=[CrossEntropyLoss(num_classes=dataset.num_classes(), batch_size=args.batch_size), None],
+        # loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), None],
         metrics=['accuracy']
     )
     mode = args.mode
@@ -170,12 +188,17 @@ def main():
         scheduler = Scheduler(initial_learning_rate=args.lr, epochs=args.epochs)
         model.fit(
             x=dataset.get_input_fn(),
+            # validation_data=dataset.get_test_input_fn(),
             # batch_size=args.batch_size,
             epochs=args.epochs,
             verbose=1 if sys.stdout.isatty() else 2,
             callbacks=[
                 tf.keras.callbacks.LearningRateScheduler(scheduler.schedule, verbose=1),
                 tf.keras.callbacks.TensorBoard(log_dir=args.model_dir, update_freq=10),
+                tf.keras.callbacks.ModelCheckpoint(
+                    os.path.join(args.model_dir, 'checkpoint'),
+                    verbose=1,
+                ),
             ]
         )
         model.save_weights(os.path.join(args.model_dir, 'checkpoint'), save_format='tf')
