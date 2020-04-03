@@ -7,6 +7,7 @@ import sys
 import numpy as np
 import tensorflow as tf
 
+from tools import validation
 from torchreid.models import osnet_tf
 from torchreid.utils import utils
 
@@ -36,6 +37,7 @@ class Market1501Dataset:
         data_dir = data_dir.rstrip('/')
         img_paths = glob.glob(data_dir + '/bounding_box_train/*.jpg')
         test_img_paths = glob.glob(data_dir + '/bounding_box_test/*.jpg')
+        query_img_paths = glob.glob(data_dir + '/query/*.jpg')
         pattern = re.compile(r'([-\d]+)_c(\d)')
 
         pid_container = set()
@@ -51,6 +53,10 @@ class Market1501Dataset:
         pids = []
         test_paths = []
         test_pids = []
+        test_camids = []
+        q_paths = []
+        q_pids = []
+        q_camids = []
         for img_path in img_paths:
             pid, camid = map(int, pattern.search(img_path).groups())
             if pid == -1:
@@ -67,19 +73,36 @@ class Market1501Dataset:
                 continue  # junk images are just ignored
             test_paths.append(img_path)
             test_pids.append(pid)
+            test_camids.append(camid)
+
+        for img_path in query_img_paths:
+            pid, camid = map(int, pattern.search(img_path).groups())
+            if pid == -1:
+                continue  # junk images are just ignored
+            q_paths.append(img_path)
+            q_pids.append(pid)
+            q_camids.append(camid)
 
         self.paths = paths
         self.pids = pids
         self.test_paths = test_paths
         self.test_pids = test_pids
+        self.test_camids = test_camids
+        self.q_paths = q_paths
+        self.q_pids = q_pids
+        self.q_camids = q_camids
 
     def get_input_fn(self):
         dataset = tf.data.Dataset.from_tensor_slices((self.paths, self.pids))
-        return dataset.map(preprocess).batch(self.batch_size).shuffle(self.batch_size * 2)
+        return dataset.map(get_preprocess()).batch(self.batch_size).shuffle(self.batch_size * 2)
 
     def get_test_input_fn(self):
-        dataset = tf.data.Dataset.from_tensor_slices((self.test_paths, self.test_pids))
-        return dataset.map(preprocess).batch(self.batch_size)
+        dataset = tf.data.Dataset.from_tensor_slices((self.test_paths, self.test_pids, self.test_camids))
+        return dataset.map(get_preprocess(include_cam=True)).batch(self.batch_size)
+
+    def get_query_input_fn(self):
+        dataset = tf.data.Dataset.from_tensor_slices((self.q_paths, self.q_pids, self.q_camids))
+        return dataset.map(get_preprocess(include_cam=True)).batch(self.batch_size)
 
     def num_classes(self):
         return len(set(self.pids))
@@ -89,16 +112,25 @@ mean = np.array([0.485, 0.456, 0.406]).reshape([1, 1, 3])
 std = np.array([0.229, 0.224, 0.225]).reshape([1, 1, 3])
 
 
-def preprocess(image_path, label):
-    raw_content = tf.io.read_file(image_path)
-    image = tf.image.decode_jpeg(raw_content, channels=3)
-    image = tf.cast(image, tf.float32)
-    # resize the image to the desired size.
-    image = tf.image.resize(image, [256, 128])
-    image = image / 255.0
-    image = (image - mean) / std
-    # image = tf.image.resize(image, (256, 128))
-    return image, label
+def get_preprocess(include_cam=False):
+    def preprocess(image_path, label):
+        raw_content = tf.io.read_file(image_path)
+        image = tf.image.decode_jpeg(raw_content, channels=3)
+        image = tf.cast(image, tf.float32)
+        # resize the image to the desired size.
+        image = tf.image.resize(image, [256, 128])
+        image = image / 255.0
+        image = (image - mean) / std
+        # image = tf.image.resize(image, (256, 128))
+        return image, label
+
+    def preprocess_cam(image_path, label, cam):
+        image, label = preprocess(image_path, label)
+        return image, label, cam
+
+    if not include_cam:
+        return preprocess
+    return preprocess_cam
 
 
 class CrossEntropyLoss(tf.keras.losses.Loss):
@@ -200,6 +232,12 @@ def main():
                     verbose=1,
                 ),
             ]
+        )
+        validation.evaluate(
+            model,
+            dataset.get_query_input_fn(),
+            dataset.get_test_input_fn(),
+            dist_metric='euclidean',
         )
         model.save_weights(os.path.join(args.model_dir, 'checkpoint'), save_format='tf')
         print(f'Checkpoint is saved to {args.model_dir}.')
