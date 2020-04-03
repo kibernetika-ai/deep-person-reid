@@ -325,7 +325,8 @@ class OSNetTF(tf.keras.Model):
         )
         # identity classification layer
         # self.classifier = nn.Linear(self.feature_dim, num_classes)
-        self.classifier = layers.Dense(num_classes)
+        # self.classifier = layers.Dense(num_classes)
+        self.classifier = layers.Dense(num_classes, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.01))
 
         # self._init_params()
 
@@ -362,7 +363,8 @@ class OSNetTF(tf.keras.Model):
 
         m_layers = []
         for dim in fc_dims:
-            m_layers.append(layers.Dense(dim))
+            # m_layers.append(layers.Dense(dim))
+            m_layers.append(layers.Dense(dim, kernel_initializer=tf.keras.initializers.RandomNormal(0, 0.01)))
             # 2 Dimensions: [batch, channels], need normalization on channels
             # m_layers.append(layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5))
             m_layers.append(layers.BatchNormalization(axis=1, momentum=0.1, epsilon=1e-5))
