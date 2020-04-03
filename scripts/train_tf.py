@@ -92,7 +92,7 @@ std = np.array([0.229, 0.224, 0.225]).reshape([1, 1, 3])
 def preprocess(image_path, label):
     raw_content = tf.io.read_file(image_path)
     image = tf.image.decode_jpeg(raw_content, channels=3)
-    image = tf.image.convert_image_dtype(image, tf.float32)
+    image = tf.cast(image, tf.float32)
     # resize the image to the desired size.
     image = tf.image.resize(image, [256, 128])
     image = image / 255.0

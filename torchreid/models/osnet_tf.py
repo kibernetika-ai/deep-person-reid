@@ -420,7 +420,7 @@ class OSNetTF(tf.keras.Model):
         if not self.trainable:
             return v
         y = self.classifier(v)
-        tf.print(tf.reduce_max(v))
+        # tf.print(tf.reduce_max(v))
         return y, v
 
 
