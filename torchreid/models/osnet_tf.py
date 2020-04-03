@@ -64,6 +64,9 @@ class ConvLayerTF(layers.Layer):
             strides=stride,
             padding=padding,
             use_bias=False,
+            kernel_initializer=tf.keras.initializers.VarianceScaling(
+                scale=2., mode="fan_out", distribution="truncated_normal"
+            ),
         )
         # self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
         self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
@@ -111,6 +114,9 @@ class Conv1x1TF(layers.Layer):
             strides=stride,
             padding="SAME",
             use_bias=False,
+            kernel_initializer=tf.keras.initializers.VarianceScaling(
+                scale=2., mode="fan_out", distribution="truncated_normal"
+            ),
         )
         # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
         self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
@@ -145,7 +151,10 @@ class Conv1x1LinearTF(layers.Layer):
     def __init__(self, in_channels, out_channels, stride=1):
         super(Conv1x1LinearTF, self).__init__()
         self.conv = layers.Conv2D(
-            out_channels, 1, strides=stride, padding="SAME", use_bias=False
+            out_channels, 1, strides=stride, padding="SAME", use_bias=False,
+            kernel_initializer=tf.keras.initializers.VarianceScaling(
+                scale=2., mode="fan_out", distribution="truncated_normal"
+            ),
         )
         # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
         self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
@@ -191,6 +200,9 @@ class Conv3x3TF(layers.Layer):
             strides=stride,
             padding="SAME",
             use_bias=False,
+            kernel_initializer=tf.keras.initializers.VarianceScaling(
+                scale=2., mode="fan_out", distribution="truncated_normal"
+            ),
         )
         # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
         self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
@@ -251,7 +263,7 @@ class LightConv3x3TF(layers.Layer):
             strides=1,
             padding="SAME",
             use_bias=False,
-            depth_multiplier=out_channels
+            depth_multiplier=out_channels,
         )
         # self.bn = layers.BatchNormalization(axis=3, momentum=0.1, epsilon=1e-5)
         self.bn = layers.BatchNormalization(axis=3, epsilon=1e-5, momentum=0.1)
@@ -352,6 +364,10 @@ class ChannelGateTF(layers.Layer):
             kernel_size=1,
             use_bias=True,
             padding="SAME",
+            kernel_initializer=tf.keras.initializers.VarianceScaling(
+                scale=2., mode="fan_out", distribution="truncated_normal"
+            ),
+            bias_initializer=tf.keras.initializers.Zeros()
         )
         self.norm1 = None
         self.relu = layers.ReLU()
@@ -359,7 +375,11 @@ class ChannelGateTF(layers.Layer):
             num_gates,
             kernel_size=1,
             use_bias=True,
-            padding="SAME"
+            padding="SAME",
+            kernel_initializer=tf.keras.initializers.VarianceScaling(
+                scale=2., mode="fan_out", distribution="truncated_normal"
+            ),
+            bias_initializer=tf.keras.initializers.Zeros()
         )
         if gate_activation == 'sigmoid':
             self.gate_activation = tf.keras.activations.sigmoid
@@ -720,7 +740,7 @@ class OSNetTF(tf.keras.Model):
         )
         # identity classification layer
         # self.classifier = nn.Linear(self.feature_dim, num_classes)
-        self.classifier = layers.Dense(num_classes)
+        self.classifier = layers.Dense(num_classes, kernel_initializer=tf.keras.initializers.RandomNormal(0.0, 0.01))
 
         # self._init_params()
 
@@ -815,6 +835,7 @@ class OSNetTF(tf.keras.Model):
         if not self.trainable:
             return v
         y = self.classifier(v)
+        # tf.print(tf.reduce_max(v))
         return y, v
 
 
