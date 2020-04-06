@@ -171,15 +171,16 @@ class CrossEntropyLoss(tf.keras.losses.Loss):
             y_true (torch.LongTensor): ground truth labels with shape (batch_size).
                 Each position contains the label index.
         """
+        batch_size = tf.shape(y_true)[0]
         log_probs = self.logsoftmax(y_pred, axis=1)
         # targets = utils.scatter_numpy(zeros.numpy(), 1, tf.expand_dims(y_true, 1).numpy(), 1)
         expanded = tf.expand_dims(tf.squeeze(y_true), 1)
         expanded = tf.cast(expanded, tf.int32)
         # tf.scatter_nd([[0,0],[1,1],[2,2],[3,3],[4,4]], np.ones([5]), [5, 10])
         targets = tf.scatter_nd(
-            tf.concat((tf.expand_dims(tf.range(self.batch_size), 1), expanded), axis=1),
-            tf.ones([self.batch_size]),
-            [self.batch_size, self.num_classes]
+            tf.concat((tf.expand_dims(tf.range(batch_size), 1), expanded), axis=1),
+            tf.ones([batch_size]),
+            [batch_size, self.num_classes]
         )
         # if self.use_gpu:
         #     targets = targets.cuda()
@@ -207,6 +208,13 @@ def main():
     args = parse_args()
     dataset = Market1501Dataset(args.data_dir, args.mode, args.batch_size)
     model = osnet_tf.osnet_x0_25(num_classes=dataset.num_classes())
+
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    for gpu in gpus:
+        print("=" * 50)
+        print(f"Set memory growth to {gpu}")
+        tf.config.experimental.set_memory_growth(gpu, True)
+        print("=" * 50)
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(amsgrad=True),
