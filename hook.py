@@ -17,8 +17,10 @@ PARAMS = {
 def norm(img, need_transpose=True):
     if need_transpose:
         img = img.transpose([2, 0, 1])
-    img = img / 255.0
-    return (img - mean) / std
+    # img = img / 255.0
+    # img = (img - mean) / std
+    img = (img / 127.5) - 1
+    return img
 
 
 def denorm(x):
