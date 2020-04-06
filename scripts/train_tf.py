@@ -119,8 +119,9 @@ def get_preprocess(include_cam=False):
         image = tf.cast(image, tf.float32)
         # resize the image to the desired size.
         image = tf.image.resize(image, [256, 128])
-        image = image / 255.0
-        image = (image - mean) / std
+        # image = image / 255.0
+        image = (image / 127.5) - 1
+        # image = (image - mean) / std
         # image = tf.image.resize(image, (256, 128))
         return image, label
 
@@ -217,8 +218,8 @@ def main():
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(amsgrad=True),
-        loss=[CrossEntropyLoss(num_classes=dataset.num_classes()), None],
-        # loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), None],
+        # loss=[CrossEntropyLoss(num_classes=dataset.num_classes()), None],
+        loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), None],
         metrics=['accuracy']
     )
     mode = args.mode
