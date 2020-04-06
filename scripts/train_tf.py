@@ -156,12 +156,11 @@ class CrossEntropyLoss(tf.keras.losses.Loss):
         label_smooth (bool, optional): whether to apply label smoothing. Default is True.
     """
 
-    def __init__(self, num_classes, batch_size, epsilon=0.1, label_smooth=True):
+    def __init__(self, num_classes, epsilon=0.1, label_smooth=True):
         super(CrossEntropyLoss, self).__init__()
         self.num_classes = num_classes
         self.epsilon = epsilon if label_smooth else 0
         self.logsoftmax = tf.nn.log_softmax
-        self.batch_size = batch_size
 
     def call(self, y_true, y_pred):
         """
@@ -218,7 +217,7 @@ def main():
 
     model.compile(
         optimizer=tf.keras.optimizers.Adam(amsgrad=True),
-        loss=[CrossEntropyLoss(num_classes=dataset.num_classes(), batch_size=args.batch_size), None],
+        loss=[CrossEntropyLoss(num_classes=dataset.num_classes()), None],
         # loss=[tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), None],
         metrics=['accuracy']
     )
